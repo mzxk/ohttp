@@ -8,12 +8,14 @@ import (
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/mzxk/oredis"
+	"github.com/mzxk/oval"
 )
 
 var (
-	expireTime int64  = 7200
-	hostSalt   string = sha(time.Now().String())
-	rds        *oredis.Oredis
+	expireTime   int64  = 7200
+	hostSalt     string = sha(time.Now().String())
+	rds          *oredis.Oredis
+	sessionCache *oval.ExpireMap = oval.NewExpire()
 )
 
 type session struct {
@@ -32,13 +34,17 @@ func initSession(add, pwd string) {
 }
 
 //AddSession newSession
-func AddSession(user string) (key, value string) {
+func AddSession(user string, exTime ...int64) (key, value string) {
 	key, value = getKV(user)
+	ex := expireTime
+	if len(exTime) >= 1 {
+		ex = exTime[0]
+	}
 	s := &session{
 		User:       user,
 		Key:        key,
 		Value:      value,
-		ExpireTime: time.Now().Unix() + expireTime,
+		ExpireTime: time.Now().Unix() + ex,
 	}
 	saveSession(s)
 	return
@@ -54,9 +60,17 @@ func deleteSession(key string) {
 	c.Do("del", key)
 }
 func updateSession(key string) {
-	c := rds.Get()
-	defer c.Close()
-	c.Do("expire", key, expireTime)
+	tm, load := sessionCache.Load(key)
+	if !load {
+		sessionCache.Store(key, 0, expireTime)
+	}
+	if load && time.Now().Unix()-tm.(int64) > 3600 {
+		sessionCache.Expire(key, expireTime)
+		c := rds.Get()
+		defer c.Close()
+		c.Do("expire", key, expireTime)
+
+	}
 }
 func loadSession(key string) (user, value string) {
 	if key == "" {

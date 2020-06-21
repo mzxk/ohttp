@@ -123,6 +123,7 @@ func (t *Server) checkSign(r *http.Request, m map[string]string) error {
 		return errors.New("SignExpire")
 	}
 	if sha(r.RequestURI+value) == sign {
+		updateSession(m["key"])
 		return nil
 	}
 	return errors.New("SignError")
