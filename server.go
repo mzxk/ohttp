@@ -2,8 +2,9 @@ package ohttp
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 //Server http-server struct
@@ -22,6 +23,11 @@ type Group struct {
 //Add Group Add router make sure that has "/"
 func (t *Group) Add(s string, f func(map[string]string) (interface{}, error)) {
 	t.t.Add(t.s+s, f)
+}
+
+//AddAuth Group Add router make sure that has "/"
+func (t *Group) AddAuth(s string, f func(map[string]string) (interface{}, error)) {
+	t.t.AddAuth(t.s+s, f)
 }
 
 //Group group
@@ -58,9 +64,26 @@ func New() *Server {
 	return t
 }
 
+//NewWithSession handle a new server and init session
+func NewWithSession(add, pwd string) *Server {
+	t := &Server{
+		router: map[string]func(map[string]string) (interface{}, error){}, routerAuth: map[string]bool{},
+		header: map[string]string{},
+	}
+	initSession(add, pwd)
+	http.HandleFunc("/", t.handle)
+	return t
+}
+
 //Add addrouter make sure that has "/"
 func (t *Server) Add(s string, f func(map[string]string) (interface{}, error)) {
 	t.router[s] = f
+}
+
+//AddAuth addrouter make sure that has "/"
+func (t *Server) AddAuth(s string, f func(map[string]string) (interface{}, error)) {
+	t.router[s] = f
+	t.routerAuth[s] = true
 }
 
 //Run @params :port
@@ -74,18 +97,40 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 	for k, v := range t.header {
 		w.Header().Set(k, v)
 	}
-	m := parse(r)
-	if t.routerAuth[r.URL.Path] {
-		//TODO check auth
-	}
+
 	if f, ok := t.router[r.URL.Path]; ok {
-		p := parse(r)
-		result, err := f(p)
+		m := parse(r)
+		if t.routerAuth[r.URL.Path] {
+			err := t.checkSign(r, m)
+			if err != nil {
+				doRespond(w, nil, err)
+				return
+			}
+		}
+		result, err := f(m)
 		doRespond(w, result, err)
-	} else {
-		doRespond(w, nil, errors.New("UnknowMethod"))
 	}
-	fmt.Println(m)
-	fmt.Println(r.URL.Path)
-	fmt.Println(r.RequestURI)
+	doRespond(w, nil, errors.New("UnknowMethod"))
+}
+func (t *Server) checkSign(r *http.Request, m map[string]string) error {
+	tm := s2i(m["nonce"]) - time.Now().Unix()
+	if tm > 3 || tm < -3 {
+		return errors.New("SignTimeWrong")
+	}
+	sign := r.Header.Get("sign")
+	_, value := loadSession(m["key"])
+	if value == "" {
+		return errors.New("SignExpire")
+	}
+	if sha(r.RequestURI+value) == sign {
+		return nil
+	}
+	return errors.New("SignError")
+}
+func s2i(s string) int64 {
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		i = 0
+	}
+	return i
 }
