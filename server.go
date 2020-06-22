@@ -12,28 +12,7 @@ type Server struct {
 	router     map[string]func(map[string]string) (interface{}, error)
 	routerAuth map[string]bool
 	header     map[string]string
-}
-
-//Group easy to write path
-type Group struct {
-	t *Server
-	s string
-}
-
-//Add Group Add router make sure that has "/"
-func (t *Group) Add(s string, f func(map[string]string) (interface{}, error)) {
-	t.t.Add(t.s+s, f)
-}
-
-//AddAuth Group Add router make sure that has "/"
-func (t *Group) AddAuth(s string, f func(map[string]string) (interface{}, error)) {
-	t.t.AddAuth(t.s+s, f)
-}
-
-//Group group
-func (t *Group) Group(s string) *Group {
-	result := &Group{t: t.t, s: t.s + s}
-	return result
+	limit      int64
 }
 
 //Access HeaderAccess for Allow Origin if empty set *
@@ -57,19 +36,23 @@ func (t *Server) Group(s string) *Group {
 //New handle a new server
 func New() *Server {
 	t := &Server{
-		router: map[string]func(map[string]string) (interface{}, error){}, routerAuth: map[string]bool{},
-		header: map[string]string{},
+		router:     map[string]func(map[string]string) (interface{}, error){},
+		routerAuth: map[string]bool{},
+		header:     map[string]string{},
 	}
 	http.HandleFunc("/", t.handle)
 	return t
 }
 
+type sRouter struct {
+	f     func(map[string]string) (interface{}, error) //func input
+	limit int64                                        //limit for
+	auth  bool
+}
+
 //NewWithSession handle a new server and init session
 func NewWithSession(add, pwd string) *Server {
-	t := &Server{
-		router: map[string]func(map[string]string) (interface{}, error){}, routerAuth: map[string]bool{},
-		header: map[string]string{},
-	}
+	t := New()
 	initSession(add, pwd)
 	http.HandleFunc("/", t.handle)
 	return t
@@ -109,6 +92,7 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		result, err := f(m)
 		doRespond(w, result, err)
+		return
 	}
 	doRespond(w, nil, errors.New("UnknowMethod"))
 }
