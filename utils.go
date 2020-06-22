@@ -36,15 +36,24 @@ func parse(r *http.Request) map[string]string {
 			result[sss[0]] = ""
 		}
 	}
+	//if methhod POST wirte body to map body
 	if r.Method == "POST" {
-
 		bt, err := ioutil.ReadAll(r.Body)
 		if err == nil {
 			result["body"] = string(bt)
 		}
 	}
+	//write ip to map
+	result["ip"] = r.Header.Get("X-Forwarded-For") + "," + getIP(r.RemoteAddr)
 	fmt.Println(result)
 	return result
+}
+func getIP(s string) string {
+	sArray := strings.Split(s, `:`)
+	if len(sArray) == 2 {
+		return sArray[0]
+	}
+	return s
 }
 
 //DoRespond return http
