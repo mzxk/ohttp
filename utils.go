@@ -58,14 +58,14 @@ func getIP(s string) string {
 
 //DoRespond return http
 func doRespond(w http.ResponseWriter, i interface{}, err error) {
-	rsp := &Respond{Result: i}
+	rsp := &Respond{}
 	if err != nil {
 		rsp.Message = err.Error()
 		i = nil
 	} else {
-		rsp.Message = "success"
+		rsp.Message = "ok"
 	}
-
+	rsp.Result = i
 	rsp.Time = time.Now().Unix()
 	s, _ := json.Marshal(rsp)
 
