@@ -67,9 +67,8 @@ func doRespond(w http.ResponseWriter, i interface{}, err error) {
 	}
 	rsp.Result = i
 	rsp.Time = time.Now().Unix()
-	s, _ := json.Marshal(rsp)
+	e := json.NewEncoder(w).Encode(rsp)
 
-	_, e := w.Write(s)
 	if e != nil {
 		log.Println("WrongWhenWriteRespond", e.Error())
 	}
