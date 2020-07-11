@@ -1,7 +1,29 @@
+/*
+	Sign的方式：
+		1：登陆，获取后端返回的key和value。
+				例如：key = foo , value = bar
+		2：在正常的请求上url，增加两个参数：
+			nonce	时间戳 精确到秒
+			key		login后后端返回的key，value之一的key
+				例如：
+					原始请求是http://localhost/user/changePwd?oldpwd=old&newpwd=new
+					增加后变成http://localhost/user/changePwd?oldpwd=old&newpwd=new&key=foo&nonce=158754624
+		3：计算sign
+			使用整个requestURI 不包含域名和端口的部分 加上 value 进行sha512计算 ， 然后截取[58:98]
+				例如：
+					needsign:="/user/changePwd?oldpwd=old&newpwd=new&key=foo&nonce=158754624"+"bar"
+					sign=sha512(needsign)[58:98]
+					"bf11206c32dc27301f681da41fc3570937c1e2cd"
+			然后在请求request里增加一个header，名字为key,值为上面的sign
+
+		请注意：
+			如果需要加密的字符串里含有中文字符,那么一定要在url被转码成%ab的格式后在进行签名，直接使用中文拼接进行的签名是无法通过检查的
+*/
+
 package ohttp
 
 import (
-	"crypto/sha1"
+	"crypto/sha512"
 	"encoding/hex"
 	"log"
 	"time"
@@ -12,7 +34,7 @@ import (
 )
 
 var (
-	expireTime   int64  = 7200
+	expireTime   int64  = 3600 * 24
 	hostSalt     string = sha(time.Now().String())
 	rds          *oredis.Oredis
 	sessionCache *oval.ExpireMap = oval.NewExpire()
@@ -34,7 +56,7 @@ func initSession(add, pwd string) {
 }
 
 //AddSession newSession
-func AddSession(user string, exTime ...int64) (key, value string) {
+func AddSession(user string, exTime ...int64) (key, value string, err error) {
 	key, value = getKV(user)
 	ex := expireTime
 	if len(exTime) >= 1 {
@@ -46,7 +68,7 @@ func AddSession(user string, exTime ...int64) (key, value string) {
 		Value:      value,
 		ExpireTime: time.Now().Unix() + ex,
 	}
-	saveSession(s)
+	err = saveSession(s)
 	return
 }
 
@@ -57,7 +79,7 @@ func DeleteSession(key string) {
 func deleteSession(key string) {
 	c := rds.Get()
 	defer c.Close()
-	c.Do("del", key)
+	_, _ = c.Do("del", key)
 }
 func updateSession(key string) {
 	tm, load := sessionCache.Load(key)
@@ -68,7 +90,10 @@ func updateSession(key string) {
 		sessionCache.Expire(key, expireTime)
 		c := rds.Get()
 		defer c.Close()
-		c.Do("expire", key, expireTime)
+		_, err := c.Do("expire", key, expireTime)
+		if err != nil {
+			log.Println("error", err)
+		}
 
 	}
 }
@@ -91,9 +116,9 @@ func loadSession(key string) (user, value string) {
 func saveSession(s *session) error {
 	c := rds.Get()
 	defer c.Close()
-	c.Send("multi")
-	c.Send("hmset", s.Key, "u", s.User, "v", s.Value)
-	c.Send("expire", s.Key, expireTime)
+	_ = c.Send("multi")
+	_ = c.Send("hmset", s.Key, "u", s.User, "v", s.Value)
+	_ = c.Send("expire", s.Key, expireTime)
 	_, err := c.Do("exec")
 	return err
 }
@@ -102,6 +127,6 @@ func getKV(user string) (k, v string) {
 	return s[1:11], s[13:30]
 }
 func sha(s string) string {
-	k := sha1.Sum([]byte(s))
-	return hex.EncodeToString(k[:])
+	k := sha512.Sum512([]byte(s))
+	return hex.EncodeToString(k[:])[58:98]
 }
