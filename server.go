@@ -44,17 +44,10 @@ func New() *Server {
 	return t
 }
 
-type sRouter struct {
-	f     func(map[string]string) (interface{}, error) //func input
-	limit int64                                        //limit for
-	auth  bool
-}
-
 //NewWithSession handle a new server and init session
 func NewWithSession(add, pwd string) *Server {
 	t := New()
 	initSession(add, pwd)
-	http.HandleFunc("/", t.handle)
 	return t
 }
 
@@ -71,7 +64,10 @@ func (t *Server) AddAuth(s string, f func(map[string]string) (interface{}, error
 
 //Run @params :port
 func (t *Server) Run(port string) {
-	http.ListenAndServe(port, nil)
+	err := http.ListenAndServe(port, nil)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
@@ -84,11 +80,12 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 	if f, ok := t.router[r.URL.Path]; ok {
 		m := parse(r)
 		if t.routerAuth[r.URL.Path] {
-			err := t.checkSign(r, m)
+			bsonid, err := t.checkSign(r, m)
 			if err != nil {
 				doRespond(w, nil, err)
 				return
 			}
+			m["bsonid"] = bsonid
 		}
 		result, err := f(m)
 		doRespond(w, result, err)
@@ -96,21 +93,21 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	doRespond(w, nil, errors.New("UnknowMethod"))
 }
-func (t *Server) checkSign(r *http.Request, m map[string]string) error {
+func (t *Server) checkSign(r *http.Request, m map[string]string) (string, error) {
 	tm := s2i(m["nonce"]) - time.Now().Unix()
 	if tm > 3 || tm < -3 {
-		return errors.New("SignTimeWrong")
+		return "", errors.New("SignTimeWrong")
 	}
 	sign := r.Header.Get("sign")
-	_, value := loadSession(m["key"])
+	ids, value := loadSession(m["key"])
 	if value == "" {
-		return errors.New("SignExpire")
+		return "", errors.New("SignExpire")
 	}
 	if sha(r.RequestURI+value) == sign {
 		updateSession(m["key"])
-		return nil
+		return ids, nil
 	}
-	return errors.New("SignError")
+	return "", errors.New("SignError")
 }
 func s2i(s string) int64 {
 	i, err := strconv.ParseInt(s, 10, 64)
