@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 //HTTPStr 1
@@ -16,9 +17,10 @@ type HTTPStr struct {
 	req    *http.Request
 	client http.Client
 	err    error
+	url    string
 }
 
-//HTTP 1
+//HTTP 一个简单的调用http client的方式，第一个参数是地址，第二个参数是？后面的参数
 func HTTP(u string, p map[string]interface{}) *HTTPStr {
 	c := http.Client{}
 	params := url.Values{}
@@ -32,10 +34,34 @@ func HTTP(u string, p map[string]interface{}) *HTTPStr {
 	if strings.Contains(u, "?") {
 		connect = "&"
 	}
-	url := u + connect + params.Encode()
-	req, err := http.NewRequest("GET", url, nil)
+	urls := u + connect + params.Encode()
+	req, err := http.NewRequest("GET", urls, nil)
 
-	return &HTTPStr{req: req, client: c, err: err}
+	return &HTTPStr{req: req, client: c, err: err, url: urls}
+}
+
+//HTTPSign 这是一个封装好的进行签名的函数，他会把key和nonce写入请求，并且在header里添加sign
+func HTTPSign(u string, p map[string]interface{}, key, value string) *HTTPStr {
+	c := http.Client{}
+	params := url.Values{}
+
+	if p != nil && len(p) > 0 {
+		for k, v := range p {
+			params.Set(k, fmt.Sprint(v))
+		}
+	}
+	params.Set("key", key)
+	params.Set("nonce", fmt.Sprint(time.Now().Unix()))
+	connect := "?"
+	if strings.Contains(u, "?") {
+		connect = "&"
+	}
+	urls := u + connect + params.Encode()
+	req, err := http.NewRequest("GET", urls, nil)
+	t := &HTTPStr{req: req, client: c, err: err, url: urls}
+	sign := sha(t.req.URL.RequestURI() + value)
+	t.Header(map[string]string{"sign": sign})
+	return t
 }
 
 //Proxy 给请求加上代理，接受https://xxxx.com:1111的格式,其他的接受不了
@@ -115,6 +141,26 @@ func (t *HTTPRespone) JSON(result interface{}) error {
 		return errors.New("replyNil")
 	}
 	return json.Unmarshal(t.Byte, &result)
+}
+
+//JSONSelf 和sign一样，只是自己网站使用的东西，这将解析成本网站正常的结构
+func (t *HTTPRespone) JSONSelf(result interface{}) error {
+	if t.Byte == nil {
+		return errors.New("replyNil")
+	}
+	var rlt struct {
+		M string
+		R json.RawMessage
+		T int64
+	}
+	err := json.Unmarshal(t.Byte, &rlt)
+	if err != nil {
+		return err
+	}
+	if rlt.M != "ok" {
+		return errors.New(rlt.M)
+	}
+	return json.Unmarshal(rlt.R, &result)
 }
 
 //String Just Use for DEBUG ! Do not Used in code
