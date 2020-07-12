@@ -2,7 +2,6 @@ package ohttp
 
 import (
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -12,6 +11,12 @@ import (
 	"time"
 )
 
+//这是一个非常关键的函数，优化他的效率可以优化整个效率。当然服务器资源都是够的，这套代码这辈子很难到达瓶颈，所以应该不会优化。。。。
+//他解析了uri字符串，把所有的参数写入到一个map里
+//如果不是get方法，还多写入了一个body的map
+//还写入了一个ip，为了安全，写入所有可以获取的ip，以，分割
+//调用了go原生的方法来避免奇怪字符的问题
+//同时会把中文的url编码返回成中文
 func parse(r *http.Request) map[string]string {
 	s := strings.Split(r.URL.RawQuery, "&")
 	result := map[string]string{}
@@ -21,10 +26,10 @@ func parse(r *http.Request) map[string]string {
 	for _, ss := range s {
 		sss := strings.Split(ss, "=")
 		if len(sss) == 2 {
-			//for safe
-			temp := template.HTMLEscapeString(sss[1])
+
+			temp := template.HTMLEscapeString(sss[1]) //避免注入
 			result[sss[0]] = temp
-			// if chinese code
+			// 翻译成中文字符
 			if strings.Contains(temp, "%") {
 				if temp2, err := url.QueryUnescape(temp); err == nil {
 					result[sss[0]] = temp2
@@ -36,8 +41,8 @@ func parse(r *http.Request) map[string]string {
 			result[sss[0]] = ""
 		}
 	}
-	//if methhod POST wirte body to map body
-	if r.Method == "POST" {
+	//if methhod not POST wirte body to map body
+	if r.Method != "GET" {
 		bt, err := ioutil.ReadAll(r.Body)
 		if err == nil {
 			result["body"] = string(bt)
@@ -45,7 +50,6 @@ func parse(r *http.Request) map[string]string {
 	}
 	//write ip to map
 	result["ip"] = r.Header.Get("X-Forwarded-For") + "," + getIP(r.RemoteAddr)
-	fmt.Println(result)
 	return result
 }
 func getIP(s string) string {
@@ -56,7 +60,11 @@ func getIP(s string) string {
 	return s
 }
 
-//DoRespond return http
+//DoRespond 返回给前端的返回函数
+//当err不是nil的时候，仅仅返回err，忽略i里所有的东西
+//返回值m如果正常，一直是ok，如果不正常，返回不正常的原因
+//返回值i是需要讨论的返回值结构
+//返回值t是服务器unix时间
 func doRespond(w http.ResponseWriter, i interface{}, err error) {
 	rsp := &Respond{}
 	if err != nil {
