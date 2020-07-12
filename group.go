@@ -1,3 +1,9 @@
+/*
+只是为了更快的输入路由，如？
+先为/v1创建一个group
+之后只要v1.add("/app1")  ("/app2")
+就可以创建两条新的陆游 /v1/app1  /v1/app2
+*/
 package ohttp
 
 //Group easy to write path
