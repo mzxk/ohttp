@@ -1,3 +1,11 @@
+/*
+提供了一个简易的http调用包
+可以使用get,post,增加header等
+同时提供自用的签名封装
+一个简单的例子：
+	ohttp.HTTP("https://baidu.com/s",map[string]string{"wd":"123"}).Proxy("http://127.0.0.1:8080").Get()
+	这里调用了一个简单的get，最终url为https://www.baidu.com/s?wd=123,同时使用了本地的Proxy
+*/
 package ohttp
 
 import (
@@ -41,6 +49,7 @@ func HTTP(u string, p map[string]interface{}) *HTTPStr {
 }
 
 //HTTPSign 这是一个封装好的进行签名的函数，他会把key和nonce写入请求，并且在header里添加sign
+//其他详情请参考session注释
 func HTTPSign(u string, p map[string]interface{}, key, value string) *HTTPStr {
 	c := http.Client{}
 	params := url.Values{}
@@ -76,7 +85,7 @@ func (t *HTTPStr) Proxy(p string) *HTTPStr {
 	return t
 }
 
-//Header Write header
+//Header 这里给请求加上header
 func (t *HTTPStr) Header(hd map[string]string) *HTTPStr {
 	for k, v := range hd {
 		t.req.Header.Set(k, v)
@@ -90,52 +99,54 @@ func (t *HTTPStr) Auth(k, v string) *HTTPStr {
 	return t
 }
 
-//Get 结构
-func (t *HTTPStr) Get() (*HTTPRespone, error) {
-	if t.err != nil {
+//Body 向请求的Body写入内容
+func (t *HTTPStr) Body(date []byte) *HTTPStr {
+	t.req.Body = ioutil.NopCloser(bytes.NewReader(date))
+	return t
+}
+
+//Method 写入请求的方法GET,POST,PUT 等
+func (t *HTTPStr) Method(method string) *HTTPStr {
+	t.req.Method = method
+	return t
+}
+
+//Do 最终进行请求，并返回
+func (t *HTTPStr) Do() (*HTTPRespone, error) {
+	if t.err != nil { //首先判断之前的过程中，是否存在错误
 		return nil, t.err
 	}
 	rsp, err := t.client.Do(t.req)
-	if err != nil {
+	if err != nil { //请求后是否存在错误
 		return nil, err
 	}
 	defer rsp.Body.Close()
-	body, err := ioutil.ReadAll(rsp.Body)
+	body, err := ioutil.ReadAll(rsp.Body) //读取返回body时是否存在错误
 	if err != nil {
 		return nil, err
 	}
 	return &HTTPRespone{URL: t.req.URL.String(), Byte: body}, err
 }
 
-//Post POST
-//input body[]byte
-func (t *HTTPStr) Post(date []byte) (*HTTPRespone, error) {
-	if t.err != nil {
-		return nil, t.err
-	}
-	t.req.Method = "POST"
-	t.req.Body = ioutil.NopCloser(bytes.NewReader(date))
-	rsp, err := t.client.Do(t.req)
-	if err != nil {
-		return nil, err
-	}
+//Get 进行get的返回,易用性封装
+func (t *HTTPStr) Get() (*HTTPRespone, error) {
+	return t.Method("GET").Do()
+}
 
-	defer rsp.Body.Close()
-	body, err := ioutil.ReadAll(rsp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return &HTTPRespone{URL: t.req.URL.String(), Byte: body}, err
+//Post POST 进行POST的返回 易用性封装
+func (t *HTTPStr) Post(date []byte) (*HTTPRespone, error) {
+	return t.Method("POST").Body(date).Do()
 }
 
 //HTTPRespone HTTP的返回值结构
+//URL 总请求url
+//Byte 获取的返回值
 type HTTPRespone struct {
 	URL  string
 	Byte []byte
 }
 
-//JSON unmarshal to json
-//input interface or struct &
+//JSON 这将用传入的result指针来解析body。
 func (t *HTTPRespone) JSON(result interface{}) error {
 	if t.Byte == nil {
 		return errors.New("replyNil")
@@ -143,7 +154,7 @@ func (t *HTTPRespone) JSON(result interface{}) error {
 	return json.Unmarshal(t.Byte, &result)
 }
 
-//JSONSelf 和sign一样，只是自己网站使用的东西，这将解析成本网站正常的结构
+//JSONSelf 和sign一样，只是自己网站使用的东西，这将解析成本网站正常的结构（参考下面rlt struct的结构
 func (t *HTTPRespone) JSONSelf(result interface{}) error {
 	if t.Byte == nil {
 		return errors.New("replyNil")
