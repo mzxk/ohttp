@@ -1,25 +1,3 @@
-/*
-	Sign的方式：
-		1：登陆，获取后端返回的key和value。
-				例如：key = foo , value = bar
-		2：在正常的请求上url，增加两个参数：
-			nonce	时间戳 精确到秒
-			key		login后后端返回的key，value之一的key
-				例如：
-					原始请求是http://localhost/user/changePwd?oldpwd=old&newpwd=new
-					增加后变成http://localhost/user/changePwd?oldpwd=old&newpwd=new&key=foo&nonce=158754624
-		3：计算sign
-			使用整个requestURI 不包含域名和端口的部分 加上 value 进行sha512计算 ， 然后截取[58:98]
-				例如：
-					needsign:="/user/changePwd?oldpwd=old&newpwd=new&key=foo&nonce=158754624"+"bar"
-					sign=sha512(needsign)[58:98]
-					"bf11206c32dc27301f681da41fc3570937c1e2cd"
-			然后在请求request里增加一个header，名字为key,值为上面的sign
-
-		请注意：
-			如果需要加密的字符串里含有中文字符,那么一定要在url被转码成%ab的格式后在进行签名，直接使用中文拼接进行的签名是无法通过检查的
-*/
-
 package ohttp
 
 import (
@@ -34,20 +12,20 @@ import (
 )
 
 var (
-	expireTime   int64  = 3600 * 24
-	hostSalt     string = sha(time.Now().String())
-	rds          *oredis.Oredis
-	sessionCache *oval.ExpireMap = oval.NewExpire()
+	expireTime   int64           = 3600 * 24                //标准的过期时间，24小时，这个时间会在用户key使用后重新刷新成24小时
+	hostSalt     string          = sha(time.Now().String()) //生成用户key，value时的盐
+	rds          *oredis.Oredis                             //redis客户端
+	sessionCache *oval.ExpireMap = oval.NewExpire()         //一个带过期时间的内存map，目的是为了减少redis的调用次数，提高效率
 )
 
 type session struct {
-	User       string
-	Key        string
-	Value      string
-	ExpireTime int64
+	User       string //用户的唯一标识符，通常这是用户的bsonID，当然也可以ivi其他的东西
+	Key        string //用户的key
+	Value      string //用户的value
+	ExpireTime int64  //过期时间
 }
 
-//InitSession if use session ,must input redis url and pwd
+//InitSession 使用redis保存session,所以必须输入redis的用户名和密码，默认的，这使用localhost
 func initSession(add, pwd string) {
 	if add == "" {
 		add = "127.0.0.1:6379"
@@ -55,13 +33,11 @@ func initSession(add, pwd string) {
 	rds = oredis.New(add, pwd)
 }
 
-//AddSession newSession
-func AddSession(user string, exTime ...int64) (key, value string, err error) {
+//AddSession 生成一个用户key和value并返回
+//同时保存到redis里
+func AddSession(user string) (key, value string, err error) {
 	key, value = getKV(user)
 	ex := expireTime
-	if len(exTime) >= 1 {
-		ex = exTime[0]
-	}
 	s := &session{
 		User:       user,
 		Key:        key,
@@ -72,7 +48,7 @@ func AddSession(user string, exTime ...int64) (key, value string, err error) {
 	return
 }
 
-//DeleteSession del session
+//DeleteSession 删除用户的当前的令牌
 func DeleteSession(key string) {
 	deleteSession(key)
 }
@@ -81,6 +57,10 @@ func deleteSession(key string) {
 	defer c.Close()
 	_, _ = c.Do("del", key)
 }
+
+//每当令牌用户使用过，就提高他的过期时间
+//为了提高效率，先调用内存验证，当时间超过1小时后，update到redis里。
+//当然，这将带来额外的内存消耗，不过通常来说，redis服务器和本地内存不在一起。而上G的token是一个很可怕的网站，我的项目可能很难做到。
 func updateSession(key string) {
 	tm, load := sessionCache.Load(key)
 	if !load {
@@ -97,6 +77,9 @@ func updateSession(key string) {
 
 	}
 }
+
+//通过传入的key,从redis中读取用户的id和value
+//很奇怪的这里我没有读取本地缓存，人懒～
 func loadSession(key string) (user, value string) {
 	if key == "" {
 		return
@@ -113,6 +96,8 @@ func loadSession(key string) (user, value string) {
 	}
 	return
 }
+
+//保存token到redis里并设置过期时间
 func saveSession(s *session) error {
 	c := rds.Get()
 	defer c.Close()
@@ -126,6 +111,8 @@ func getKV(user string) (k, v string) {
 	s := sha(user + time.Now().String() + hostSalt)
 	return s[1:11], s[13:30]
 }
+
+//这是一个伪装，伪装自己是个sha1,避免彩虹表
 func sha(s string) string {
 	k := sha512.Sum512([]byte(s))
 	return hex.EncodeToString(k[:])[58:98]
