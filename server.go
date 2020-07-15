@@ -24,7 +24,10 @@ package ohttp
 import (
 	"errors"
 	"net/http"
+	"sync"
 	"time"
+
+	"github.com/mzxk/oval"
 )
 
 //Server http-server struct
@@ -32,6 +35,8 @@ type Server struct {
 	router     map[string]func(map[string]string) (interface{}, error) //路由的主要结构体
 	routerAuth map[string]bool                                         //确认当前路由是否需要验证签名
 	header     map[string]string                                       //写在这里的东西将会写在返回值的header里
+	LimitIP    int64
+	LimitID    sync.Map
 }
 
 //Access 跨域问题处理，当s为空时，默认允许所有域 ×
@@ -53,12 +58,35 @@ func (t *Server) Group(s string) *Group {
 	return &Group{t: t, s: s}
 }
 
+//SetLimitIP 设置每IP的访问限制，这是一个统一限速
+func (t *Server) SetLimitIP(i int64) {
+	if i <= 0 {
+		i = 1200
+	}
+	t.LimitIP = i
+}
+
+//SetLimitID 设置每ID（既签名接口）的访问限制，如果不设置，默认为120/分钟
+func (t *Server) SetLimitID(id string, i int64) {
+	if i <= 0 {
+		i = 120
+	}
+	t.LimitID.Store(id, i)
+}
+func (t *Server) getLimitID(id string) int64 {
+	if i, ok := t.LimitID.Load(id); ok {
+		return i.(int64)
+	}
+	return 120
+}
+
 //New handle a new server
 func New() *Server {
 	t := &Server{
 		router:     map[string]func(map[string]string) (interface{}, error){},
 		routerAuth: map[string]bool{},
 		header:     map[string]string{},
+		LimitIP:    1200,
 	}
 	http.HandleFunc("/", t.handle)
 	return t
@@ -99,11 +127,20 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if f, ok := t.router[r.URL.Path]; ok { //路由存在
-		m := parse(r)                 //解析
+		m := parse(r) //解析
+		//每分钟1200次的IP限制
+		if oval.Limited(m["ip"], 60, t.LimitIP) {
+			doRespond(w, nil, errors.New("outLimit"))
+			return
+		}
 		if t.routerAuth[r.URL.Path] { //此路由需要验证签名
 			bsonid, err := t.checkSign(r, m) //验证签名
 			if err != nil {                  //验证失败
 				doRespond(w, nil, err)
+				return
+			}
+			if oval.Limited(bsonid, 60, t.getLimitID(bsonid)) {
+				doRespond(w, nil, errors.New("outLimit"))
 				return
 			}
 			m["bsonid"] = bsonid //签名验证成功，把用户id写入统一输入
