@@ -64,7 +64,7 @@ func deleteSession(key string) {
 func updateSession(key string) {
 	tm, load := sessionCache.Load(key)
 	if !load {
-		sessionCache.Store(key, 0, expireTime)
+		sessionCache.Store(key, int64(0), expireTime)
 	}
 	if load && time.Now().Unix()-tm.(int64) > 3600 {
 		sessionCache.Expire(key, expireTime)
