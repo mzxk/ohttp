@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -43,9 +44,12 @@ func parse(r *http.Request) map[string]string {
 	}
 	//if methhod not POST wirte body to map body
 	if r.Method != "GET" {
-		bt, err := ioutil.ReadAll(r.Body)
-		if err == nil {
-			result["body"] = string(bt)
+		lens := s2i(r.Header.Get("Content-Length"))
+		if lens > 0 {
+			bt, err := ioutil.ReadAll(r.Body)
+			if err == nil {
+				result["body"] = string(bt)
+			}
 		}
 	}
 	//write ip to map
@@ -87,4 +91,12 @@ type Respond struct {
 	Message string      `json:"m"`
 	Result  interface{} `json:"r"`
 	Time    int64       `json:"t"`
+}
+
+func s2i(s string) int64 {
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		i = 0
+	}
+	return i
 }

@@ -24,7 +24,6 @@ package ohttp
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -147,11 +146,4 @@ func (t *Server) checkSign(r *http.Request, m map[string]string) (string, error)
 		return ids, nil
 	}
 	return "", errors.New("SignError")
-}
-func s2i(s string) int64 {
-	i, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		i = 0
-	}
-	return i
 }
