@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	expireTime   int64           = 3600 * 24                //标准的过期时间，24小时，这个时间会在用户key使用后重新刷新成24小时
-	hostSalt     string          = sha(time.Now().String()) //生成用户key，value时的盐
-	rds          *oredis.Oredis                             //redis客户端
-	sessionCache *oval.ExpireMap = oval.NewExpire()         //一个带过期时间的内存map，目的是为了减少redis的调用次数，提高效率
+	expireTime   int64              = 3600 * 24                //标准的过期时间，24小时，这个时间会在用户key使用后重新刷新成24小时
+	hostSalt                        = sha(time.Now().String()) //生成用户key，value时的盐
+	rds          *oredis.Oredis                                //redis客户端
+	sessionCache = oval.NewExpire()                            //一个带过期时间的内存map，目的是为了减少redis的调用次数，提高效率
 )
 
 type session struct {
