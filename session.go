@@ -53,9 +53,7 @@ func DeleteSession(key string) {
 	deleteSession(key)
 }
 func deleteSession(key string) {
-	c := rds.Get()
-	defer c.Close()
-	_, _ = c.Do("del", key)
+	_, _ = rds.Do("del", key)
 }
 
 //每当令牌用户使用过，就提高他的过期时间
@@ -68,9 +66,7 @@ func updateSession(key string) {
 	}
 	if load && time.Now().Unix()-tm.(int64) > 3600 {
 		sessionCache.Expire(key, expireTime)
-		c := rds.Get()
-		defer c.Close()
-		_, err := c.Do("expire", key, expireTime)
+		_, err := rds.Do("expire", key, expireTime)
 		if err != nil {
 			log.Println("error", err)
 		}
@@ -84,9 +80,7 @@ func loadSession(key string) (user, value string) {
 	if key == "" {
 		return
 	}
-	c := rds.Get()
-	defer c.Close()
-	m, err := redis.StringMap(c.Do("hgetall", key))
+	m, err := redis.StringMap(rds.Do("hgetall", key))
 	if err != nil {
 		log.Println("GetSession", err)
 		return
@@ -99,12 +93,10 @@ func loadSession(key string) (user, value string) {
 
 //保存token到redis里并设置过期时间
 func saveSession(s *session) error {
-	c := rds.Get()
-	defer c.Close()
-	_ = c.Send("multi")
-	_ = c.Send("hmset", s.Key, "u", s.User, "v", s.Value)
-	_ = c.Send("expire", s.Key, expireTime)
-	_, err := c.Do("exec")
+	_, err := rds.Multi([][]interface{}{
+		{"hmset", s.Key, "u", s.User, "v", s.Value},
+		{"expire", s.Key, expireTime},
+	})
 	return err
 }
 func getKV(user string) (k, v string) {

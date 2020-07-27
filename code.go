@@ -13,12 +13,10 @@ var nonceSeed = rand.NewSource(time.Now().Unix() / 2)
 
 func CodeGet(key string, time, limit int64) (string, error) {
 	code := fmt.Sprintf("%06d", rand.New(nonceSeed).Intn(999999))
-	rd := rds.Get()
-	defer rd.Close()
-	_ = rd.Send("multi")
-	_ = rd.Send("hmset", key, "limit", limit, "code", code)
-	_ = rd.Send("expire", key, time)
-	_, err := rd.Do("exec")
+	_, err := rds.Multi([][]interface{}{
+		{"hmset", key, "limit", limit, "code", code},
+		{"expire", key, time},
+	})
 	return code, err
 }
 
