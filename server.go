@@ -177,7 +177,7 @@ func (t *Server) checkSign(r *http.Request, m map[string]string) (string, error)
 	if value == "" {
 		return "", errors.New("SignExpire")
 	}
-	if sha(r.RequestURI+value) == sign {
+	if mac(r.RequestURI, value) == sign {
 		//更新此key的过期时间，并且返回用户id
 		updateSession(m["key"])
 		return ids, nil

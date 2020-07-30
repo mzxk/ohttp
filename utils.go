@@ -1,6 +1,9 @@
 package ohttp
 
 import (
+	"crypto/hmac"
+	"crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
 	"html/template"
 	"io/ioutil"
@@ -99,4 +102,10 @@ func s2i(s string) int64 {
 		i = 0
 	}
 	return i
+}
+func mac(s, key string) string {
+	bey := []byte(key)
+	mac := hmac.New(sha512.New, bey)
+	mac.Write([]byte(s))
+	return hex.EncodeToString(mac.Sum(nil))[58:98]
 }
