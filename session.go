@@ -93,10 +93,11 @@ func loadSession(key string) (user, value string) {
 
 //保存token到redis里并设置过期时间
 func saveSession(s *session) error {
-	_, err := rds.Multi([][]interface{}{
-		{"hmset", s.Key, "u", s.User, "v", s.Value},
-		{"expire", s.Key, expireTime},
-	})
+	c := rds.Get()
+	defer c.Close()
+	_ = c.Send("hmset", s.Key, "u", s.User, "v", s.Value)
+	_ = c.Send("expire", s.Key, expireTime)
+	err := c.Flush()
 	return err
 }
 func getKV(user string) (k, v string) {

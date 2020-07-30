@@ -82,14 +82,11 @@ RE:
 
 //RedisSet 一个简易的缓存,同时忽略了所有错误。请不要塞重要的内容在里面，塞即使小概率出错也无伤大雅的东西
 func RedisSet(key, txt string, expire int64) {
-	_, _ = rds.Multi([][]interface{}{
-		{"select", 1},
-		{"set", key, txt, "ex", expire},
-	})
+	_, _ = rds.Do("set", "RS."+key, txt, "ex", expire)
 }
 
 //RedisGet 一个简易的缓存,同时忽略了所有错误。请不要塞重要的内容在里面，塞即使小概率出错也无伤大雅的东西
 func RedisGet(key string) string {
-	s, _ := redis.String(rds.Do("get", key))
+	s, _ := redis.String(rds.Do("get", "RS."+key))
 	return s
 }
