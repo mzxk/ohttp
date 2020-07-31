@@ -112,6 +112,9 @@ func (t *Server) AddAuth(s string, f func(map[string]string) (interface{}, error
 
 //Run 启动坚挺，记得port的格式是：12345
 func (t *Server) Run(port string) {
+	if len(t.header) == 0 {
+		t.Access("*")
+	}
 	err := http.ListenAndServe(port, nil)
 	if err != nil {
 		panic(err)
