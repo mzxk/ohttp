@@ -115,6 +115,7 @@ func (t *Server) Run(port string) {
 	if len(t.header) == 0 {
 		t.Access("*")
 	}
+	t.HeaderSet("Access-Control-Allow-Headers", "*")
 	err := http.ListenAndServe(port, nil)
 	if err != nil {
 		panic(err)
