@@ -155,7 +155,7 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 		doRespond(w, result, err)
 		return
 	}
-	doRespond(w, nil, errors.New("UnknowMethod"))
+	doRespond(w, nil, errors.New("UnknownMethod"))
 }
 
 //验证签名 签名在请求的header里sign保存，
@@ -169,7 +169,7 @@ func (t *Server) checkSign(r *http.Request, m map[string]string) (string, error)
 	}
 	//验证时间是否在3妙内
 	tm := s2i(m["nonce"]) - time.Now().Unix()
-	if tm > 2 || tm < -2 {
+	if tm > 20 || tm < -20 {
 		return "", errors.New("SignTimeWrong")
 	}
 	//判断sign是否存在并且一致
