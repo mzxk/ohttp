@@ -36,7 +36,7 @@ func parse(r *http.Request) map[string]string {
 			// 翻译成中文字符
 			if strings.Contains(temp, "%") {
 				if temp2, err := url.QueryUnescape(temp); err == nil {
-					result[sss[0]] = temp2
+					result[sss[0]] = strings.TrimSpace(temp2)
 				}
 			}
 
