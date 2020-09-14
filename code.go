@@ -1,7 +1,6 @@
 package ohttp
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -48,8 +47,8 @@ func codeCheck(key, code string) error {
 	//到这里代表重试次数已经超过限制了，那么需要删除这个key，通常的
 	if i < 0 {
 		_, _ = rd.Do("del", key)
-		return errors.New("outLimit")
+		return errs.outLimit
 	}
 	//到这里代表还有重试次数，但是验证码是错误的
-	return errors.New("codeWrong")
+	return errs.codeWrong
 }

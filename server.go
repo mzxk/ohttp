@@ -22,7 +22,6 @@
 package ohttp
 
 import (
-	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -134,7 +133,7 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 		m := parse(r) //解析
 		//每分钟1200次的IP限制
 		if oval.Limited(m["ip"], 60, t.LimitIP) {
-			doRespond(w, nil, errors.New("outLimit"))
+			doRespond(w, nil, errs.outLimit)
 			return
 		}
 		if t.routerAuth[r.URL.Path] { //此路由需要验证签名
@@ -144,7 +143,7 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if oval.Limited(bsonid, 60, t.getLimitID(bsonid)) {
-				doRespond(w, nil, errors.New("outLimit"))
+				doRespond(w, nil, errs.outLimit)
 				return
 			}
 			m["bsonid"] = bsonid //签名验证成功，把用户id写入统一输入
@@ -155,7 +154,7 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 		doRespond(w, result, err)
 		return
 	}
-	doRespond(w, nil, errors.New("UnknownMethod"))
+	doRespond(w, nil, errs.unknownMethod)
 }
 
 //验证签名 签名在请求的header里sign保存，
@@ -165,26 +164,26 @@ func (t *Server) handle(w http.ResponseWriter, r *http.Request) {
 func (t *Server) checkSign(r *http.Request, m map[string]string) (string, error) {
 	//验证key是否存在
 	if m["key"] == "" {
-		return "", errors.New("SignKeyWrong")
+		return "", errs.signWrong
 	}
 	//验证时间是否在3妙内
 	tm := s2i(m["nonce"]) - time.Now().Unix()
 	if tm > 20 || tm < -20 {
-		return "", errors.New("SignTimeWrong")
+		return "", errs.signTimeWrong
 	}
 	//判断sign是否存在并且一致
 	sign := r.Header.Get("sign")
 	if sign == "" {
-		return "", errors.New("SignError")
+		return "", errs.signWrong
 	}
 	ids, value := loadSession(m["key"])
 	if value == "" {
-		return "", errors.New("SignExpire")
+		return "", errs.signExpire
 	}
 	if mac(r.RequestURI, value) == sign {
 		//更新此key的过期时间，并且返回用户id
 		updateSession(m["key"])
 		return ids, nil
 	}
-	return "", errors.New("SignError")
+	return "", errs.signWrong
 }
