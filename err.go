@@ -10,7 +10,7 @@ var errs = struct {
 	signTimeWrong error
 	codeWrong     error
 }{
-	errors.New("登陆已过期"),
+	errors.New("登录已过期"),
 	errors.New("接口访问超过限制"),
 	errors.New("未知路由"),
 	errors.New("签名不正确"),
